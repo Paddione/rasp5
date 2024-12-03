@@ -41,3 +41,6 @@ qm template 9000
 # Now to create a new VM from template:
 qm clone 9000 101 --name k3s-node1 --full****
 
+
+ln -s /var/lib/rancher/k3s/server/manifests/ /home/patrick/rasp5/
+sudo chown -h patrick:patrick /home/ubuntu/patrick/rasp5/

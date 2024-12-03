@@ -1,0 +1,17 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: wildcard-route
+  namespace: kube-system
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: HostRegexp(`{subdomain:[a-zA-Z0-9-]+}.korczewski.de`)
+      kind: Rule
+      services:
+        - name: whoami
+          namespace: kube-system
+          port: 80
+  tls:
+    certResolver: le
