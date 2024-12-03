@@ -5,17 +5,17 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-# Function to check if we're running on Debian
-check_debian() {
-    if ! grep -q 'Debian' /etc/os-release; then
-        echo "This script is intended for Debian only!"
+# Function to check if we're running on Ubuntu
+check_ubuntu() {
+    if ! grep -q 'Ubuntu' /etc/os-release; then
+        echo "This script is intended for Ubuntu only!"
         exit 1
     fi
 }
 
-check_debian
+check_ubuntu
 
-# Install prerequisites for Debian
+# Install prerequisites for Ubuntu
 echo "Installing prerequisites..."
 apt update && apt upgrade -y
 apt install -y \
@@ -31,20 +31,22 @@ apt install -y \
     git \
     jq \
     sudo \
-    gnupg2
+    gnupg2 \
+    apparmor \
+    apparmor-utils
 
-# Enable services required for Debian
-systemctl enable iscsid
-systemctl start iscsid
+# Enable required services for Ubuntu
+systemctl enable --now iscsid
+systemctl enable --now apparmor
 
-# Raspberry Pi specific configuration for Debian
-if [ -f /boot/cmdline.txt ]; then
-    if ! grep -q "cgroup_enable=cpuset" /boot/cmdline.txt; then
-        sed -i '$ s/$/ cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory/' /boot/cmdline.txt
+# Raspberry Pi specific configuration (if needed)
+if [ -f /boot/firmware/cmdline.txt ]; then
+    if ! grep -q "cgroup_enable=cpuset" /boot/firmware/cmdline.txt; then
+        sed -i '$ s/$/ cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory/' /boot/firmware/cmdline.txt
     fi
 fi
 
-# Configure sysctl for Debian
+# Configure sysctl
 cat > /etc/sysctl.d/k3s.conf << EOF
 net.bridge.bridge-nf-call-ip6tables = 1
 net.bridge.bridge-nf-call-iptables = 1
@@ -53,7 +55,7 @@ vm.max_map_count = 262144
 EOF
 sysctl --system
 
-# Load modules
+# Load required modules
 cat > /etc/modules-load.d/k3s.conf << EOF
 br_netfilter
 overlay
@@ -72,7 +74,7 @@ metadata:
 spec:
   valuesContent: |-
     additionalArguments:
-      - "--certificatesresolvers.le.acme.email=patrick@korczewski.de"
+      - "--certificatesresolvers.le.acme.email=your.email@example.com"
       - "--certificatesresolvers.le.acme.storage=/data/acme.json"
       - "--certificatesresolvers.le.acme.tlschallenge=true"
       - "--certificatesresolvers.le.acme.server=https://acme-v02.api.letsencrypt.org/directory"
@@ -100,11 +102,15 @@ curl -sfL https://get.k3s.io | sh -
 echo "Waiting for K3s to be ready..."
 sleep 30
 
+# Get current user (assuming script is run with sudo)
+CURRENT_USER=$(logname || echo $SUDO_USER)
+USER_HOME=$(eval echo ~$CURRENT_USER)
+
 # Configure kubectl for user
-mkdir -p /home/patrick/.kube
-cp /etc/rancher/k3s/k3s.yaml /home/patrick/.kube/config
-chown -R patrick:patrick /home/patrick/.kube
-echo "export KUBECONFIG=/home/patrick/.kube/config" >> /home/patrick/.bashrc
+mkdir -p $USER_HOME/.kube
+cp /etc/rancher/k3s/k3s.yaml $USER_HOME/.kube/config
+chown -R $CURRENT_USER:$CURRENT_USER $USER_HOME/.kube
+echo "export KUBECONFIG=$USER_HOME/.kube/config" >> $USER_HOME/.bashrc
 
 # Install helm
 curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
@@ -120,7 +126,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(\`traefik.korczewski.de\`)
+    - match: Host(\`traefik.example.com\`)
       kind: Rule
       services:
         - name: api@internal
@@ -140,7 +146,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: HostRegexp(\`{subdomain:[a-zA-Z0-9-]+}.korczewski.de\`)
+    - match: HostRegexp(\`{subdomain:[a-zA-Z0-9-]+}.example.com\`)
       kind: Rule
       services:
         - name: whoami
@@ -151,7 +157,7 @@ spec:
 EOF
 
 # Set up aliases
-cat >> /home/patrick/.bashrc << EOF
+cat >> $USER_HOME/.bashrc << EOF
 
 # Kubernetes aliases
 alias k='kubectl'
@@ -166,11 +172,14 @@ EOF
 
 # Save token for later use
 NODE_TOKEN=$(cat /var/lib/rancher/k3s/server/node-token)
-echo $NODE_TOKEN > /home/patrick/node-token.txt
-chown patrick:patrick /home/patrick/node-token.txt
+echo $NODE_TOKEN > $USER_HOME/node-token.txt
+chown $CURRENT_USER:$CURRENT_USER $USER_HOME/node-token.txt
 
 echo "Installation complete!"
-echo "Node token saved to /home/patrick/node-token.txt"
-echo "System will reboot in 10 seconds..."
-sleep 10
+echo "Node token saved to $USER_HOME/node-token.txt"
+echo "IMPORTANT: Before rebooting, make sure to:"
+echo "1. Replace 'your.email@example.com' with your actual email in /var/lib/rancher/k3s/server/manifests/traefik-config.yaml"
+echo "2. Replace 'example.com' with your actual domain in the Traefik ingress configurations"
+echo "System will reboot in 30 seconds... Press Ctrl+C to cancel"
+sleep 30
 reboot
