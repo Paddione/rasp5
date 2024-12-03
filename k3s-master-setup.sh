@@ -74,7 +74,7 @@ metadata:
 spec:
   valuesContent: |-
     additionalArguments:
-      - "--certificatesresolvers.le.acme.email=patrick@korczewski.de"
+      - "--certificatesresolvers.le.acme.email=your.email@example.com"
       - "--certificatesresolvers.le.acme.storage=/data/acme.json"
       - "--certificatesresolvers.le.acme.tlschallenge=true"
       - "--certificatesresolvers.le.acme.server=https://acme-v02.api.letsencrypt.org/directory"
